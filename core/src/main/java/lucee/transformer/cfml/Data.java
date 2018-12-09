@@ -20,14 +20,18 @@ package lucee.transformer.cfml;
 
 import lucee.runtime.config.Config;
 import lucee.transformer.Factory;
+import lucee.transformer.bytecode.Body;
 import lucee.transformer.bytecode.Root;
 import lucee.transformer.cfml.evaluator.EvaluatorPool;
+import lucee.transformer.cfml.expression.SimpleExprTransformer;
+import lucee.transformer.cfml.script.DocComment;
 import lucee.transformer.library.function.FunctionLib;
 import lucee.transformer.library.tag.TagLib;
 import lucee.transformer.library.tag.TagLibTag;
+import lucee.transformer.library.tag.TagLibTagScript;
 import lucee.transformer.util.SourceCode;
 
-public abstract class Data {
+public class Data {
 	
 		public final SourceCode srcCode;
 		public final TransfomerSettings settings; 
@@ -38,10 +42,25 @@ public abstract class Data {
 		public final EvaluatorPool ep;
 		public final Factory factory;
 		public final Config config;
+		public boolean allowLowerThan;
 		
-	    public Data(Factory factory,Root root,SourceCode cfml,EvaluatorPool ep,TransfomerSettings settings,TagLib[][] tlibs,FunctionLib[] flibs,TagLibTag[] scriptTags) {
+		private SimpleExprTransformer set;
+		
+		public short mode=0;
+		public boolean insideFunction;
+		public String tagName;
+		public boolean isCFC;
+		public boolean isInterface;
+		public short context=TagLibTagScript.CTX_NONE; 
+		public DocComment docComment;
+		private Body parent;
+		
+
+		
+	    public Data(Factory factory,Root root,SourceCode srcCode,EvaluatorPool ep,TransfomerSettings settings,TagLib[][] tlibs,
+	    		FunctionLib[] flibs,TagLibTag[] scriptTags, boolean allowLowerThan) {
 	    	this.root = root;
-	    	this.srcCode = cfml;
+	    	this.srcCode = srcCode;
 	    	this.settings = settings;
 	    	this.tlibs = tlibs;
 	    	this.flibs = flibs;
@@ -49,7 +68,23 @@ public abstract class Data {
 			this.ep = ep;
 			this.factory = factory;
 			this.config=factory.getConfig();
+			this.allowLowerThan=allowLowerThan;
 		}
 	    
-	    
+		public SimpleExprTransformer getSimpleExprTransformer() {
+			return set;
+		}
+
+		public void setSimpleExprTransformer(SimpleExprTransformer set) {
+			this.set = set;
+		}
+
+		public Body setParent(Body parent) {
+			Body tmp=this.parent;
+			this.parent=parent;
+			return tmp;
+		}
+		public Body getParent() {
+			return parent;
+		}
 	}

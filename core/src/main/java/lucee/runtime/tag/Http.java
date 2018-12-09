@@ -18,6 +18,30 @@
  */
 package lucee.runtime.tag;
 
+import java.io.ByteArrayInputStream;
+import java.io.EOFException;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.security.KeyStore;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.zip.GZIPInputStream;
+
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+
 import lucee.commons.io.CharsetUtil;
 import lucee.commons.io.IOUtil;
 import lucee.commons.io.SystemUtil;
@@ -77,6 +101,7 @@ import lucee.runtime.type.util.KeyConstants;
 import lucee.runtime.type.util.ListUtil;
 import lucee.runtime.util.PageContextUtil;
 import lucee.runtime.util.URLResolver;
+
 import org.apache.http.HttpEntityEnclosingRequest;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
@@ -109,29 +134,6 @@ import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.protocol.BasicHttpContext;
 import org.apache.http.protocol.HttpContext;
-
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import java.io.ByteArrayInputStream;
-import java.io.EOFException;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintStream;
-import java.io.UnsupportedEncodingException;
-import java.net.MalformedURLException;
-import java.net.SocketTimeoutException;
-import java.net.URI;
-import java.net.URL;
-import java.nio.charset.Charset;
-import java.security.KeyStore;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.zip.GZIPInputStream;
 
 // MUST change behavor of mltiple headers now is a array, it das so?
 
@@ -773,9 +775,10 @@ public final class Http extends BodyTagImpl {
 
 			String host = null;
 			HttpHost httpHost;
+
 			try {
 				URL _url = HTTPUtil.toURL(url, port, encoded);
-				httpHost = new HttpHost(_url.getHost(), _url.getPort());
+				httpHost = new HttpHost(_url.getHost(), _url.getPort(), _url.getProtocol());
 				host = _url.getHost();
 				url = _url.toExternalForm();
 				if(sbQS.length() > 0) {
@@ -1078,8 +1081,10 @@ public final class Http extends BodyTagImpl {
 
 			// set Username and Password
 			if(this.username != null) {
+
 				if(this.password == null)
 					this.password = "";
+
 				if(AUTH_TYPE_NTLM == this.authType) {
 					if(StringUtil.isEmpty(this.workStation, true))
 						throw new ApplicationException("attribute workstation is required when authentication type is [NTLM]");
@@ -1088,8 +1093,9 @@ public final class Http extends BodyTagImpl {
 
 					HTTPEngine4Impl.setNTCredentials(builder, this.username, this.password, this.workStation, this.domain);
 				}
-				else
+				else {
 					httpContext = HTTPEngine4Impl.setCredentials(builder, httpHost, this.username, this.password, preauth);
+				}
 			}
 
 			// set Proxy

@@ -40,7 +40,9 @@ import lucee.commons.io.IOUtil;
 import lucee.commons.io.SystemUtil;
 import lucee.commons.io.res.util.ResourceClassLoader;
 import lucee.runtime.config.Config;
+import lucee.runtime.config.ConfigImpl;
 import lucee.runtime.config.Identification;
+import lucee.runtime.engine.ThreadLocalPageContext;
 import lucee.runtime.exp.PageException;
 import lucee.runtime.op.Caster;
 import lucee.runtime.osgi.OSGiUtil;
@@ -150,9 +152,12 @@ public final class ClassUtil {
 			return OSGiUtil.loadBundle(name, version, id, true).loadClass(className);
 		} 
 		catch (ClassNotFoundException e) {
+			String appendix="";
+			if(!StringUtil.isEmpty(e.getMessage(),true)) 
+				appendix=" "+e.getMessage();
 			if(version==null)
-				throw new ClassException("In the OSGi Bundle with the name ["+name+"] was no class with name ["+className+"] found.");
-			throw new ClassException("In the OSGi Bundle with the name ["+name+"] and the version ["+version+"] was no class with name ["+className+"] found.");
+				throw new ClassException("In the OSGi Bundle with the name ["+name+"] was no class with name ["+className+"] found."+appendix);
+			throw new ClassException("In the OSGi Bundle with the name ["+name+"] and the version ["+version+"] was no class with name ["+className+"] found."+appendix);
 		}
 	}
 	
@@ -185,7 +190,6 @@ public final class ClassUtil {
 	 * @throws ClassException 
 	 */
 	public static Class loadClass(String className) throws ClassException {
-		double start=SystemUtil.millis();
 		Set<Throwable> exceptions=new HashSet<Throwable>();
 		// OSGI env
 		Class clazz= _loadClass(new OSGiBasedClassLoading(), className, null,exceptions);
@@ -298,7 +302,6 @@ public final class ClassUtil {
 	 * @return matching Class
 	 */
 	private static Class _loadClass(ClassLoading cl,String className, Class defaultValue, Set<Throwable> exceptions) {
-		double start=SystemUtil.millis();
 		className=className.trim();
 		if(StringUtil.isEmpty(className)) return defaultValue;
 		
@@ -349,7 +352,7 @@ public final class ClassUtil {
 	}
 	
 	private static Class<?> __loadClass(ClassLoading cl,String className, Class<?> defaultValue, Set<Throwable> exceptions) {
-		double start=SystemUtil.millis();
+		
 		Class<?> clazz = checkPrimaryTypes(className, null);
 		if (clazz != null) return clazz;
 		
@@ -878,5 +881,16 @@ public final class ClassUtil {
 		public Class<?> loadClass(String className, Class defaultValue, Set<Throwable> exceptions){
 			return loadClass(className, defaultValue);
 		}
+	}
+
+	public static ClassLoader getClassLoader(Class clazz) {
+		ClassLoader cl = clazz.getClassLoader();
+		if(cl!=null)return cl;
+		
+		Config config = ThreadLocalPageContext.getConfig();
+		if(config instanceof ConfigImpl) {
+			return ((ConfigImpl)config).getClassLoaderCore();
+		}
+		return new lucee.commons.lang.ClassLoaderHelper().getClass().getClassLoader();
 	}
 }

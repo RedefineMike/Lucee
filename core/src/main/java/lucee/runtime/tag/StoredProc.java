@@ -6,21 +6,22 @@
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either 
  * version 2.1 of the License, or (at your option) any later version.
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public 
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  */
 package lucee.runtime.tag;
 
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -141,7 +142,7 @@ public class StoredProc extends BodyTagTryCatchFinallySupport {
 
 	/**
 	 * set the value cachedafter This is the age of which the query data can be
-	 * 
+	 *
 	 * @param cachedafter
 	 *            value to set
 	 **/
@@ -152,7 +153,7 @@ public class StoredProc extends BodyTagTryCatchFinallySupport {
 
 	/**
 	 * set the value cachename This is specific to JTags, and allows you to give the cache a specific name
-	 * 
+	 *
 	 * @param cachename
 	 *            value to set
 	 **/
@@ -162,7 +163,7 @@ public class StoredProc extends BodyTagTryCatchFinallySupport {
 
 	/**
 	 * set the value cachedwithin
-	 * 
+	 *
 	 * @param cachedwithin
 	 *            value to set
 	 **/
@@ -291,7 +292,7 @@ public class StoredProc extends BodyTagTryCatchFinallySupport {
 			String name = this.procedure.toUpperCase().trim();
 
 			// split procedure definition
-			String catalog = null, scheme = null;
+			String catalog = null, schema = null;
 			{
 				int index = name.lastIndexOf('.');
 				if(index != -1) {
@@ -300,74 +301,76 @@ public class StoredProc extends BodyTagTryCatchFinallySupport {
 
 					index = catalog.lastIndexOf('.');
 					if(index != -1) {
-						scheme = catalog.substring(0, index).trim();
+						schema = catalog.substring(0, index).trim();
 						catalog = catalog.substring(index + 1).trim();
-						// scheme=catalog.substring(index+1);
+						// schema=catalog.substring(index+1);
 						// catalog=catalog.substring(0,index);
 					}
 				}
-				if(StringUtil.isEmpty(scheme))
-					scheme = null;
+				if(StringUtil.isEmpty(schema))
+					schema = null;
 				if(StringUtil.isEmpty(catalog))
 					catalog = null;
 			}
 
 			try {
-				// if(procedureColumnCache==null)procedureColumnCache=new ReferenceMap();
-				// ProcMetaCollection coll=procedureColumnCache.get(procedure);
-				DataSourceSupport d = ((DataSourceSupport)dc.getDatasource());
-				long cacheTimeout = d.getMetaCacheTimeout();
-				Map<String, ProcMetaCollection> procedureColumnCache = d.getProcedureColumnCache();
-				String id = procedure.toLowerCase();
-				ProcMetaCollection coll = procedureColumnCache.get(id);
+				// if(procParamsCache==null)procParamsCache=new ReferenceMap();
+				// ProcMetaCollection procParams=procParamsCache.get(procedure);
+				DataSourceSupport ds = ((DataSourceSupport)dc.getDatasource());
+				long cacheTimeout = ds.getMetaCacheTimeout();
+				Map<String, ProcMetaCollection> procParamsCache = ds.getProcedureColumnCache();
+				String cacheId = procedure.toLowerCase();
+				ProcMetaCollection procParams = procParamsCache.get(cacheId);
 
-				if(coll == null || (cacheTimeout >= 0 && (coll.created + cacheTimeout) < System.currentTimeMillis())) {
-					DatabaseMetaData md = conn.getMetaData();
-					String _catalog = null, _scheme = null, _name = null;
-					boolean available = false;
-					/*
-					 * print.e("pro:"+procedure); print.e("cat:"+catalog); print.e("sch:"+scheme); print.e("nam:"+name);
-					 */
-					ResultSet proc = md.getProcedures(null, null, name);
-					try {
-						while(proc.next()) {
-							_catalog = proc.getString(1);
-							_scheme = proc.getString(2);
-							_name = proc.getString(3);
-							if(
-									_name.equalsIgnoreCase(name)
-									// second option is very unlikely to ever been the case, but does not hurt to test
-									&& (catalog == null || _catalog == null || catalog.equalsIgnoreCase(_catalog))
-									// second option is very unlikely to ever been the case, but does not hurt to test
-									&& (scheme == null || _scheme == null || scheme.equalsIgnoreCase(_scheme))
-							) {
-								available = true;
-								break;
-							}
-							else {
-								Log log = pageContext.getConfig().getLog("datasource");
-								if(log.getLogLevel() >= Log.LEVEL_DEBUG)	// log entry added to troubleshoot LDEV-1147
-									log.debug("LDEV1147", String.format("name=[%s] scheme=[%s] catalog=[%s] _name=[%s] _scheme=[%s] _catalog=[%s]", name, scheme, catalog, _name, _scheme, _catalog));
-							}
-						}
-					} finally {
-						IOUtil.closeEL(proc);
+				if(procParams == null || (cacheTimeout >= 0 && (procParams.created + cacheTimeout) < System.currentTimeMillis())) {
+
+					// get PROC information and resolve synonym if needed per LDEV-1147
+					String sql =
+							"SELECT  PROC.OWNER, PROC.OBJECT_NAME, PROC.PROCEDURE_NAME, PROC.OBJECT_TYPE \n" +
+							"FROM    ALL_PROCEDURES PROC \n" +
+							"    LEFT JOIN ALL_SYNONYMS SYNO \n" +
+							"       ON PROC.OBJECT_NAME = SYNO.TABLE_NAME AND PROC.OWNER = SYNO.TABLE_OWNER \n" +
+							"WHERE   (PROC.PROCEDURE_NAME = ? OR (PROC.OBJECT_NAME = ? AND PROC.OBJECT_TYPE = 'PROCEDURE')) \n";
+
+					if (catalog != null)
+						sql += "    AND (PROC.OBJECT_NAME = ? OR SYNO.SYNONYM_NAME = ?)";
+
+					PreparedStatement preparedStatement = conn.prepareStatement(sql);
+					preparedStatement.setString(1, name);
+					preparedStatement.setString(2, name);
+
+					if (catalog != null) {
+						preparedStatement.setString(3, catalog);
+						preparedStatement.setString(4, catalog);
 					}
 
-					if(available) {
-						/*
-						 * print.e("---------------"); print.e("_pro:"+procedure); print.e("_cat:"+_catalog); print.e("_sch:"+_scheme); print.e("_nam:"+_name);
-						 */
-						ResultSet res = md.getProcedureColumns(_catalog, _scheme, _name, "%");
-						coll = createProcMetaCollection(res);
-						procedureColumnCache.put(id, coll);
+					ResultSet resultSet = preparedStatement.executeQuery();
+
+					if(resultSet.next()) {
+						String _schema  = resultSet.getString(1);	// OWNER
+						String _catalog = resultSet.getString(2);	// OBJECT_NAME
+						String _name    = resultSet.getString(3);	// PROCEDURE_NAME
+
+						if (_name == null && _catalog != null){
+							// when the PROC is not scoped the PROCEDURE_NAME is actually the OBJECT_NAME, see LDEV-1833
+							_name = _catalog;
+							_catalog = null;
+						}
+
+						ResultSet procColumns = conn.getMetaData().getProcedureColumns(_catalog, _schema, _name, "%");
+						procParams = createProcMetaCollection(procColumns);
+						procParamsCache.put(cacheId, procParams);
+					}
+					else {
+						Log log = pageContext.getConfig().getLog("datasource");
+						if(log.getLogLevel() >= Log.LEVEL_INFO)
+							log.info(StoredProc.class.getSimpleName(), "procedure " + procedure + " not found in view ALL_PROCEDURES");
 					}
 				}
 
-				int index = -1;
-				int ct;
-				if(coll != null) {
-					Iterator<ProcMeta> it = coll.metas.iterator();
+				int ct, index = -1;
+				if(procParams != null) {
+					Iterator<ProcMeta> it = procParams.metas.iterator();
 					ProcMeta pm;
 					while(it.hasNext()) {
 						index++;
@@ -426,7 +429,6 @@ public class StoredProc extends BodyTagTryCatchFinallySupport {
 				}
 
 				contractTo(params, index + 1);
-
 				// if(res!=null)print.out(new QueryImpl(res,"columns").toString());
 			}
 			catch (SQLException e) {

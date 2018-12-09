@@ -55,7 +55,6 @@ import lucee.commons.net.URLEncoder;
 import lucee.runtime.exp.PageException;
 
 import org.apache.tika.Tika;
-import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
 
 /**
@@ -1031,10 +1030,17 @@ public static String toString(Resource file, String charset) throws IOException 
 			return defaultValue;
         }
     }
+    
+    public static String getMimeType(Resource res, String defaultValue) {
+    	return getMimeType(res, null, defaultValue);
+    }
 
-	public static String getMimeType(Resource res, String defaultValue) {
+	public static String getMimeType(Resource res, String fileName, String defaultValue) {
 		Metadata md = new Metadata();
-		md.set(Metadata.RESOURCE_NAME_KEY, res.getName());
+		
+		String ext=StringUtil.isEmpty(fileName,true)?null:ResourceUtil.getExtension(fileName.trim(), null);
+		
+		md.set(Metadata.RESOURCE_NAME_KEY, ext==null?res.getName():fileName.trim());
 		md.set(Metadata.CONTENT_LENGTH, Long.toString(res.length()));
     	
 		InputStream is=null;
@@ -1043,14 +1049,15 @@ public static String toString(Resource file, String charset) throws IOException 
         	
         	String result = tika.detect(is=res.getInputStream(),md);
         	if(result.indexOf("tika")!=-1) {
-        		String tmp = ResourceUtil.EXT_MT.get(ResourceUtil.getExtension(res, "").toLowerCase());
+        		String tmp = ResourceUtil.EXT_MT.get(ext!=null?ext:ResourceUtil.getExtension(res, "").toLowerCase());
         		if(!StringUtil.isEmpty(tmp)) return tmp;
+        		if(!StringUtil.isEmpty(defaultValue)) return defaultValue;
         	}
         	return result;
         } 
         catch(Exception e) {
-        	String tmp = ResourceUtil.EXT_MT.get(ResourceUtil.getExtension(res, "").toLowerCase());
-    		if(!StringUtil.isEmpty(tmp)) return tmp;
+        	String tmp = ResourceUtil.EXT_MT.get(ext!=null?ext:ResourceUtil.getExtension(res, "").toLowerCase());
+    		if(tmp.indexOf("tika")==-1 && !StringUtil.isEmpty(tmp)) return tmp;
         	return defaultValue;
         }
 		finally {

@@ -44,6 +44,7 @@ import lucee.commons.io.res.util.ResourceUtil;
 import lucee.commons.lang.ExceptionUtil;
 import lucee.commons.lang.StringUtil;
 import lucee.commons.lang.SystemOut;
+import lucee.loader.engine.CFMLEngineFactory;
 import lucee.loader.util.Util;
 import lucee.runtime.config.Config;
 import lucee.runtime.config.ConfigImpl;
@@ -196,8 +197,10 @@ public class RHExtension implements Serializable {
 				readManifestConfig(el, extensionFile.getAbsolutePath(), null);
 				_softLoaded=true;
 			}
+			catch(InvalidVersion iv) {
+				throw iv;
+			}
 			catch(ApplicationException ae) {
-				SystemOut.printDate(ae);
 				init(toResource(config,el),false);
 				_softLoaded=false;
 			}
@@ -279,6 +282,7 @@ public class RHExtension implements Serializable {
 		String _img=null;
 		String path;
 		String fileName,sub;
+		boolean isPack200;
 		
 		List<BundleInfo> bundles=new ArrayList<BundleInfo>();
 		List<String> jars=new ArrayList<String>();
@@ -294,11 +298,13 @@ public class RHExtension implements Serializable {
 		List<String> plugins=new ArrayList<String>();
 		List<String> gateways=new ArrayList<String>();
 		List<String> archives=new ArrayList<String>();
+		
 		try {
 			while ( ( entry = zis.getNextEntry()) != null ) {
 				path=entry.getName();
 				fileName=fileName(entry);
 				sub=subFolder(entry);
+				isPack200=false;
 				
 				if(!entry.isDirectory() && path.equalsIgnoreCase("META-INF/MANIFEST.MF")) {
 					manifest = toManifest(config,zis,null);
@@ -306,16 +312,16 @@ public class RHExtension implements Serializable {
 				else if(!entry.isDirectory() && path.equalsIgnoreCase("META-INF/logo.png")) {
 					_img = toBase64(zis,null);
 				}
-				
-				
+
 				// jars
 				else if(!entry.isDirectory() && 
 					(startsWith(path,type,"jars") || startsWith(path,type,"jar") 
 					|| startsWith(path,type,"bundles") || startsWith(path,type,"bundle") 
-					|| startsWith(path,type,"lib") || startsWith(path,type,"libs")) && StringUtil.endsWithIgnoreCase(path, ".jar")) {
-					//print.e("xxxxxx-------- "+fileName+" -------xxxxxx");
+					|| startsWith(path,type,"lib") || startsWith(path,type,"libs")) && 
+					(StringUtil.endsWithIgnoreCase(path, ".jar") || (isPack200=StringUtil.endsWithIgnoreCase(path, ".jar.pack.gz")))) {
+					
 					jars.add(fileName);
-					BundleInfo bi = BundleInfo.getInstance(fileName,zis, false);
+					BundleInfo bi = BundleInfo.getInstance(fileName,zis, false, isPack200);
 					if(bi.isBundle()) bundles.add(bi);
 				}
 				
@@ -570,14 +576,14 @@ public class RHExtension implements Serializable {
 	private void readLoaderVersion(String label, String str) throws ApplicationException {
 		minLoaderVersion = Caster.toDoubleValue(str,0);
 		if(minLoaderVersion>SystemUtil.getLoaderVersion()) {
-			throw new ApplicationException("The Extension ["+label+"] cannot be loaded, "+Constants.NAME+" Loader Version must be at least ["+str+"], update the Lucee.jar first.");
+			throw new InvalidVersion("The Extension ["+label+"] cannot be loaded, "+Constants.NAME+" Loader Version must be at least ["+str+"], update the Lucee.jar first.");
 		}
 	}
 
 	private void readCoreVersion(String label, String str, Info info) throws ApplicationException {
 		minCoreVersion = OSGiUtil.toVersion(str, null);
 		if(minCoreVersion!=null && Util.isNewerThan(minCoreVersion,info.getVersion())) {
-			throw new ApplicationException("The Extension ["+label+"] cannot be loaded, "+Constants.NAME+" Version must be at least ["+minCoreVersion.toString()+"], version is ["+info.getVersion().toString()+"].");
+			throw new InvalidVersion("The Extension ["+label+"] cannot be loaded, "+Constants.NAME+" Version must be at least ["+minCoreVersion.toString()+"], version is ["+info.getVersion().toString()+"].");
 		}
 	}
 
@@ -631,18 +637,20 @@ public class RHExtension implements Serializable {
 		ZipEntry entry;
 		String path;
 		String fileName;
-		
+		boolean isPack200;
 		try {
 			while ( ( entry = zis.getNextEntry()) != null ) {
 				path=entry.getName();
 				fileName=fileName(entry);
+				isPack200=false;
 				// jars
 				if(!entry.isDirectory() && 
 					(startsWith(path,type,"jars") || startsWith(path,type,"jar") 
 					|| startsWith(path,type,"bundles") || startsWith(path,type,"bundle") 
-					|| startsWith(path,type,"lib") || startsWith(path,type,"libs")) && StringUtil.endsWithIgnoreCase(path, ".jar")) {
+					|| startsWith(path,type,"lib") || startsWith(path,type,"libs")) && 
+					(StringUtil.endsWithIgnoreCase(path, ".jar") || (isPack200=StringUtil.endsWithIgnoreCase(path, ".jar.pack.gz")))) {
 					
-					Object obj = XMLConfigAdmin.installBundle(config,zis,fileName,version,false,false);
+					Object obj = XMLConfigAdmin.installBundle(config,zis,fileName,version,false,false,isPack200);
 					// jar is not a bundle, only a regular jar
 					if(!(obj instanceof BundleFile)) {
 						Resource tmp=(Resource)obj;
@@ -1125,6 +1133,18 @@ public class RHExtension implements Serializable {
 		if(!loaded)load(extensionFile);
 		return bundles;
 	}
+	
+	public BundleInfo[] getBundles(BundleInfo[] defaultValue) {
+		if(!loaded){
+			try{
+				load(extensionFile);
+			}
+			catch(Exception e) {
+				return defaultValue;
+			}
+		}
+		return bundles;
+	}
 
 	public String[] getFlds() throws ApplicationException, IOException, BundleException {
 		if(!loaded)load(extensionFile);
@@ -1328,5 +1348,15 @@ public class RHExtension implements Serializable {
 		catch (Exception e) {
 			throw Caster.toPageException(e);
 		}
+	}
+	
+	public static class InvalidVersion extends ApplicationException {
+
+		private static final long serialVersionUID = 8561299058941139724L;
+
+		public InvalidVersion(String message) {
+			super(message);
+		}
+		
 	}
 }

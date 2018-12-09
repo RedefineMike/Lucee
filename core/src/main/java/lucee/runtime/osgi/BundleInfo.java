@@ -33,6 +33,8 @@ import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
 import lucee.commons.io.IOUtil;
+import lucee.commons.io.SystemUtil;
+import lucee.commons.io.compress.Pack200Util;
 import lucee.commons.io.res.Resource;
 import lucee.commons.io.res.type.file.FileResource;
 import lucee.commons.lang.ExceptionUtil;
@@ -50,31 +52,33 @@ public class BundleInfo implements Serializable {
 
 	private static final long serialVersionUID = -8723070772449992030L;
 	
-	private final Version version;
-	private final String name;
-	private final String symbolicName;
-	private final String exportPackage;
-	private final String importPackage;
-	private final String activator;
-	private final int manifestVersion;
-	private final String description;
-	private final String dynamicImportPackage;
-	private final String classPath;
-	private final String requireBundle;
-	private final String fragementHost;
-	private final Map<String, Object> headers;
-	private final static Map<String, BundleInfo> bundles=new HashMap<String, BundleInfo>();
+	private Version version;
+	private String name;
+	private String symbolicName;
+	private String exportPackage;
+	private String importPackage;
+	private String activator;
+	private int manifestVersion;
+	private String description;
+	private String dynamicImportPackage;
+	private String classPath;
+	private String requireBundle;
+	private String fragementHost;
+	private Map<String, Object> headers;
+	private static Map<String, BundleInfo> bundles=new HashMap<String, BundleInfo>();
 	
 	
 	
-	public static BundleInfo getInstance(String id, InputStream is, boolean closeStream) throws IOException, BundleException {
+	public static BundleInfo getInstance(String id, InputStream is, boolean closeStream, boolean isPack200) throws IOException, BundleException {
 		BundleInfo bi = bundles.get(id);
 		if(bi!=null) return bi;
 		
 		File tmp = File.createTempFile("temp-extension", "lex");
 		
 		try {
-			IOUtil.copy(is, new FileOutputStream(tmp), closeStream,true);
+			FileOutputStream os = new FileOutputStream(tmp);
+			if(isPack200) Pack200Util.pack2Jar(is, os, closeStream,true);
+			else IOUtil.copy(is, os, closeStream,true);
 			bundles.put(id, bi = new BundleInfo(tmp));
 			return bi;
 		}
@@ -91,10 +95,12 @@ public class BundleInfo implements Serializable {
 		JarFile jar=new JarFile(file);
 		try {
 			Manifest manifest = jar.getManifest();
+			if(manifest==null) return;
+			
 			Attributes attrs = manifest.getMainAttributes();
+			if(attrs==null) return;
 			
 			manifestVersion = Caster.toIntValue(attrs.getValue("Bundle-ManifestVersion"),1);
-			
 			name = attrs.getValue("Bundle-Name");
 			symbolicName = attrs.getValue("Bundle-SymbolicName");
 			String tmp = attrs.getValue("Bundle-Version");
@@ -109,7 +115,6 @@ public class BundleInfo implements Serializable {
 			fragementHost = attrs.getValue("Fragment-Host");
 			
 			headers=createHeaders(attrs);
-			
 		}
 		finally {
 			IOUtil.closeEL(jar);

@@ -160,17 +160,20 @@ printError(error);
 			$('##updateInfoDesc').html('<img src="../res/img/spinner16.gif.cfm">');
 			disableBlockUI=true;
 
-
-	 		$.get(url, function(response) {
-	      		field.disabled = false;
-
-	 			if((response+"").trim()=="")
+			$.ajax({
+				method: 'get',
+				url: url,
+				success: function(response, status) {
+					if((response+"").trim()=="")
 					window.location=('#request.self#?action=#url.action#'); //$('##updateInfoDesc').html("<p>#stText.services.update.restartOKDesc#</p>");
-				else
+					else
 					$('##updateInfoDesc').html('<div class="error">'+response+'</div>');
 					//window.location=('#request.self#?action=#url.action#'); //$('##updateInfoDesc').html(response);
-
-	 		});
+				},
+				error: function(e) {
+					$('##updateInfoDesc').html('<div class="error">Update Failed Please Try again</div>');
+				}
+			});
 		});
 	}
 	</script>
@@ -307,25 +310,13 @@ stText.services.update.downUpDesc=replace(stText.services.update.downUpDesc,'{ve
 							<p>#replace(stText.services.update.downUpSub,'{version}',"<b>"&server.lucee.version&"</b>") #</p>
 							<select name="version"  class="large" style="margin-top:8px">
 								<cfset qry=updateData.qryotherVersions>
-								<cfset downCount=0>
-								<cfset allowedRow=-1>
 								<cfloop query="#qry#">
-									<cfif allowedRow NEQ -1>
-										<cfif  allowedRow NEQ qry.currentrow>
-											<cfcontinue>
-										<cfelse>
-											<cfset allowedRow+=5>
-										</cfif>
-									</cfif>
 									<cfset btn="">
 
 									<cfset comp=compare(currVS,qry.versionSortable)>
 									<cfif compare(minVS,qry.versionSortable) GT 0>
 										<cfcontinue>
 									<cfelseif comp GT 0>
-										<cfif ++downCount GT 50 and allowedRow EQ -1 >
-											<cfset allowedRow = qry.currentrow+5>
-										</cfif>
 										<cfset btn=stText.services.update.downgradeTo>
 									<cfelseif comp LT 0>
 										<cfif !hasUpdate><cfcontinue></cfif>

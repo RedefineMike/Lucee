@@ -39,9 +39,9 @@ import lucee.runtime.ext.function.BIF;
 import lucee.runtime.op.Caster;
 import lucee.runtime.type.Array;
 import lucee.runtime.type.ArrayImpl;
+import lucee.runtime.type.ArrayPro;
 import lucee.runtime.type.Collection;
 import lucee.runtime.type.Collection.Key;
-import lucee.runtime.type.ArrayPro;
 import lucee.runtime.type.Iteratorable;
 import lucee.runtime.type.KeyImpl;
 import lucee.runtime.type.Query;
@@ -199,19 +199,22 @@ public class Map extends BIF implements ClosureFunc {
 		return rtn;
 	}
 
-	private static Query invoke(PageContext pc, Query qry, UDF udf, ExecutorService es, List<Future<Data<Object>>> futures,Query rtn) throws PageException {
+	private static Query invoke(PageContext pc, Query qry, UDF udf, ExecutorService es, List<Future<Data<Object>>> futures,Query template) throws PageException {
 		Key[] colNames = qry.getColumnNames();
 		
-		if(rtn==null) {
+		QueryImpl rtn;
+		
+		if(template==null) {
 			rtn=new QueryImpl(colNames,0,qry.getName());
 		}
 		else {
-			// check if we have the necessary columns
+			rtn=new QueryImpl(template.getColumnNames(),0,template.getName());
+			/*// check if we have the necessary columns
 			for(Key colName:colNames) {
 				if(rtn.getColumn(colName,null)==null) {
 					rtn.addColumn(colName,new ArrayImpl());
 				}
-			}
+			}*/
 		}
 		final int pid=pc.getId();
 		ForEachQueryIterator it=new ForEachQueryIterator(qry, pid);
